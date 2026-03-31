@@ -1,0 +1,27 @@
+.root {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background-color: white;
+  height: 60px;
+  border-bottom: 1px solid var(--color-grey-100);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-4);
+  width: 100%;
+}
+
+.contentWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  /* Removed max-width: 1600px to fix large screen alignment */
+  margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+  .root {
+    padding: 0 var(--space-2);
+  }
+}

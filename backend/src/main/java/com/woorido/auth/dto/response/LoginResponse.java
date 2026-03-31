@@ -1,0 +1,16 @@
+package com.woorido.auth.dto.response;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class LoginResponse {
+
+    private String accessToken;
+    private String refreshToken;
+    private String tokenType;
+    private Integer expiresIn;
+    private String returnTo;
+    private UserInfo user;
+}

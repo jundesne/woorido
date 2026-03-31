@@ -1,0 +1,41 @@
+package com.woorido.notification.domain;
+
+public enum NotificationType {
+    // 챌린지 관련
+    CHALLENGE_JOINED("CHALLENGE"), CHALLENGE_LEFT("CHALLENGE"),
+    CHALLENGE_ACTIVATED("CHALLENGE"), CHALLENGE_CLOSED("CHALLENGE"),
+
+    // 서포트/납입 관련
+    SUPPORT_REMINDER("PAYMENT"), SUPPORT_PAID("PAYMENT"), SUPPORT_OVERDUE("PAYMENT"),
+
+    // 모임 관련
+    MEETING_CREATED("CHALLENGE"), MEETING_VOTE_STARTED("CHALLENGE"),
+    MEETING_CONFIRMED("CHALLENGE"), MEETING_CANCELLED("CHALLENGE"),
+    MEETING_REMINDER("CHALLENGE"),
+
+    // 지출 관련
+    EXPENSE_VOTE_STARTED("PAYMENT"), EXPENSE_APPROVED("PAYMENT"),
+    EXPENSE_REJECTED("PAYMENT"), BARCODE_ISSUED("PAYMENT"),
+
+    // 투표 관련
+    VOTE_STARTED("CHALLENGE"), VOTE_CLOSED("CHALLENGE"),
+    KICK_APPROVED("CHALLENGE"), LEADER_KICKED("CHALLENGE"),
+
+    // SNS 관련
+    POST_LIKED("SOCIAL"), POST_COMMENTED("SOCIAL"),
+    COMMENT_LIKED("SOCIAL"), COMMENT_REPLIED("SOCIAL"),
+
+    // 시스템 관련
+    SYSTEM_NOTICE("SYSTEM"), ACCOUNT_CHARGED("PAYMENT"),
+    ACCOUNT_WITHDRAWN("PAYMENT"), REPORT_RESULT("SYSTEM");
+
+    private final String category;
+
+    NotificationType(String category) {
+        this.category = category;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+}

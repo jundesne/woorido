@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.woorido.post.repository.PostMapper">
+
+      <insert id="insert" parameterType="com.woorido.post.domain.Post">
+        INSERT INTO woorido.posts (
+            id,
+            challenge_id,
+            created_by,
+            title,
+            content,
+            category,
+            is_notice,
+            is_pinned,
+            like_count,
+            comment_count,
+            view_count,
+            created_at,
+            updated_at
+        ) VALUES (
+            #{id},
+            #{challengeId},
+            #{createdBy},
+            #{title},
+            #{content},
+            #{category},
+            #{isNotice},
+            #{isPinned},
+            #{likeCount},
+            #{commentCount},
+            #{viewCount},
+            #{createdAt},
+            #{updatedAt}
+        )
+      </insert>
+
+      <resultMap id="PostResultMap" type="com.woorido.post.domain.Post">
+          <id property="id" column="id"/>
+          <result property="challengeId" column="challenge_id"/>
+          <result property="createdBy" column="created_by"/>
+          <result property="title" column="title"/>
+          <result property="content" column="content"/>
+          <result property="category" column="category"/>
+          <result property="isNotice" column="is_notice"/>
+          <result property="isPinned" column="is_pinned"/>
+          <result property="likeCount" column="like_count"/>
+          <result property="commentCount" column="comment_count"/>
+          <result property="viewCount" column="view_count"/>
+          <result property="createdAt" column="created_at"/>
+          <result property="updatedAt" column="updated_at"/>
+      </resultMap>
+
+      <select id="findById" resultMap="PostResultMap">
+        SELECT
+            id,
+            challenge_id,
+            created_by,
+            title,
+            content,
+            category,
+            is_notice,
+            is_pinned,
+            like_count,
+            comment_count,
+            view_count,
+            created_at,
+            updated_at
+        FROM woorido.posts
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+      </select>
+
+      <select id="findByIdWithAuthor" resultType="java.util.Map">
+        SELECT 
+            p.id,
+            p.challenge_id as CHALLENGE_ID,
+            p.created_by as CREATED_BY,
+            p.title,
+            p.content,
+            p.category,
+            p.is_notice as IS_NOTICE,
+            p.is_pinned as IS_PINNED,
+            p.like_count as LIKE_COUNT,
+            p.comment_count as COMMENT_COUNT,
+            p.view_count as VIEW_COUNT,
+            p.created_at as CREATED_AT,
+            p.updated_at as UPDATED_AT,
+            u.nickname as AUTHOR_NICKNAME,
+            u.profile_image_url as AUTHOR_PROFILE_IMAGE
+        FROM woorido.posts p
+        JOIN woorido.users u ON p.created_by = u.id
+        WHERE p.id = #{id} AND p.deleted_at IS NULL
+      </select>
+
+      <update id="increaseViewCount">
+        UPDATE woorido.posts
+        SET view_count = view_count + 1
+        WHERE id = #{id}
+      </update>
+
+    <update id="increaseLikeCount">
+        UPDATE woorido.posts
+        SET like_count = like_count + 1
+        WHERE id = #{postId}
+    </update>
+
+    <update id="decreaseLikeCount">
+        UPDATE woorido.posts
+        SET like_count = like_count - 1
+        WHERE id = #{postId} AND like_count > 0
+    </update>
+
+    <update id="increaseCommentCount">
+        UPDATE woorido.posts
+        SET comment_count = comment_count + 1
+        WHERE id = #{postId}
+    </update>
+
+    <update id="decreaseCommentCount">
+        UPDATE woorido.posts
+        SET comment_count = comment_count - 1
+        WHERE id = #{postId} AND comment_count > 0
+    </update>
+
+      <update id="update" parameterType="com.woorido.post.domain.Post">
+        UPDATE woorido.posts
+        SET 
+            title = #{title},
+            content = #{content},
+            category = #{category},
+            is_notice = #{isNotice},
+            is_pinned = #{isPinned},
+            updated_at = #{updatedAt}
+        WHERE id = #{id}
+      </update>
+
+      <update id="updatePinned">
+        UPDATE woorido.posts
+        SET is_pinned = #{isPinned},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{postId}
+      </update>
+
+      <update id="clearPinnedNotices">
+        UPDATE woorido.posts
+        SET is_pinned = 'N',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE challenge_id = #{challengeId}
+          AND is_notice = 'Y'
+          AND is_pinned = 'Y'
+          AND deleted_at IS NULL
+      </update>
+
+      <select id="isLiked" resultType="boolean">
+        SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
+        FROM woorido.post_likes
+        WHERE post_id = #{postId} AND user_id = #{userId}
+      </select>
+
+      <select id="findAttachments" resultType="java.util.Map">
+        SELECT 
+            id as FILE_ID,
+            image_url as FILE_URL,
+            display_order
+        FROM woorido.post_images
+        WHERE post_id = #{postId}
+        ORDER BY display_order ASC
+      </select>
+
+    <update id="delete">
+        UPDATE woorido.posts
+        SET deleted_at = CURRENT_TIMESTAMP
+        WHERE id = #{postId}
+    </update>
+
+      <sql id="searchCriteria">
+            <where>
+            challenge_id = #{challengeId}
+            AND deleted_at IS NULL
+                  <if test="category != null and category != 'ALL'">
+                AND category = #{category}
+                  </if>
+                  <if test="isNotice != null">
+                AND is_notice = #{isNotice}
+                  </if>
+            </where>
+      </sql>
+
+      <!-- Oracle 11g Style Pagination -->
+      <select id="findAll" resultType="java.util.Map">
+        SELECT
+            ID,
+            CHALLENGE_ID,
+            CREATED_BY,
+            TITLE,
+            CONTENT,
+            CATEGORY,
+            IS_NOTICE,
+            IS_PINNED,
+            LIKE_COUNT,
+            COMMENT_COUNT,
+            VIEW_COUNT,
+            CREATED_AT,
+            AUTHOR_NICKNAME,
+            AUTHOR_PROFILE_IMAGE,
+            IS_LIKED
+        FROM (
+            SELECT
+                A.ID,
+                A.CHALLENGE_ID,
+                A.CREATED_BY,
+                A.TITLE,
+                A.CONTENT,
+                A.CATEGORY,
+                A.IS_NOTICE,
+                A.IS_PINNED,
+                A.LIKE_COUNT,
+                A.COMMENT_COUNT,
+                A.VIEW_COUNT,
+                A.CREATED_AT,
+                A.AUTHOR_NICKNAME,
+                A.AUTHOR_PROFILE_IMAGE,
+                A.IS_LIKED,
+                ROWNUM RNUM
+            FROM (
+                SELECT 
+                    p.id as ID,
+                    p.challenge_id as CHALLENGE_ID,
+                    p.created_by as CREATED_BY,
+                    p.title as TITLE,
+                    p.content as CONTENT,
+                    p.category as CATEGORY,
+                    p.is_notice as IS_NOTICE,
+                    p.is_pinned as IS_PINNED,
+                    p.like_count as LIKE_COUNT,
+                    p.comment_count as COMMENT_COUNT,
+                    p.view_count as VIEW_COUNT,
+                    p.created_at as CREATED_AT,
+                    u.nickname as AUTHOR_NICKNAME,
+                    u.profile_image_url as AUTHOR_PROFILE_IMAGE,
+                    (SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END 
+                     FROM woorido.post_likes pl 
+                     WHERE pl.post_id = p.id AND pl.user_id = #{userId}) as IS_LIKED
+                FROM woorido.posts p
+                JOIN woorido.users u ON p.created_by = u.id
+            <include refid="searchCriteria"/>
+                ORDER BY p.is_pinned DESC, ${sortColumn} ${sortOrder}
+            ) A
+            WHERE ROWNUM &lt;= #{endRow}
+        ) WHERE RNUM &gt; #{startRow}
+      </select>
+
+      <select id="count" resultType="int">
+        SELECT COUNT(*)
+        FROM woorido.posts
+            <include refid="searchCriteria"/>
+      </select>
+
+</mapper>

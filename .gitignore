@@ -1,0 +1,11 @@
+.obsidian/
+.tmp/
+.vscode/
+.metadata/
+.venv/
+woorido_skills/
+
+# Gradle
+.gradle-home/
+**/.gradle/
+**/build/

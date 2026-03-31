@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.woorido.vote.repository.VoteMapper">
+  <!-- Learning note: SQL ids in this mapper must match Java Mapper method names. -->
+
+  <insert id="insert" parameterType="com.woorido.vote.domain.Vote">
+    INSERT INTO woorido.meeting_votes (
+      id, meeting_id, status, expires_at, created_at, required_count
+    ) VALUES (
+      #{id}, #{meetingId}, #{status}, #{deadline}, #{createdAt}, #{requiredCount}
+    )
+  </insert>
+
+  <select id="findById" resultType="com.woorido.vote.domain.Vote">
+    SELECT
+      mv.id,
+      m.challenge_id AS challengeId,
+      'MEETING_ATTENDANCE' AS type,
+      m.title AS title,
+      m.description AS description,
+      CAST(NULL AS VARCHAR2(36)) AS targetId,
+      mv.meeting_id AS meetingId,
+      mv.status,
+      m.created_by AS createdBy,
+      mv.expires_at AS deadline,
+      mv.created_at AS createdAt,
+      mv.closed_at AS completedAt,
+      mv.required_count AS requiredCount
+    FROM woorido.meeting_votes mv
+    JOIN woorido.meetings m ON mv.meeting_id = m.id
+    WHERE mv.id = #{id}
+  </select>
+
+  <select id="findAllByChallengeIdWithFilter" resultType="java.util.Map">
+    SELECT * FROM (
+      SELECT A.*, ROWNUM AS RNUM FROM (
+        SELECT
+          mv.id AS VOTE_ID,
+          'MEETING_ATTENDANCE' AS TYPE,
+          m.title AS TITLE,
+          mv.status AS STATUS,
+          m.created_by AS CREATED_BY_ID,
+          u.nickname AS CREATED_BY_NICKNAME,
+          mv.expires_at AS DEADLINE,
+          mv.created_at AS CREATED_AT,
+          (SELECT COUNT(*) FROM woorido.meeting_vote_records mvr WHERE mvr.meeting_vote_id = mv.id AND mvr.choice = 'AGREE') AS AGREE_COUNT,
+          (SELECT COUNT(*) FROM woorido.meeting_vote_records mvr WHERE mvr.meeting_vote_id = mv.id AND mvr.choice = 'DISAGREE') AS DISAGREE_COUNT,
+          (SELECT COUNT(*) FROM woorido.meeting_vote_records mvr WHERE mvr.meeting_vote_id = mv.id) AS TOTAL_VOTE_COUNT
+        FROM woorido.meeting_votes mv
+        JOIN woorido.meetings m ON mv.meeting_id = m.id
+        LEFT JOIN woorido.users u ON m.created_by = u.id
+        WHERE m.challenge_id = #{challengeId}
+          <if test="status != null">
+            AND mv.status = #{status}
+          </if>
+          <if test="type != null">
+            AND 'MEETING_ATTENDANCE' = #{type}
+          </if>
+        ORDER BY mv.created_at DESC
+      ) A
+      WHERE ROWNUM &lt;= #{offset} + #{size}
+    )
+    WHERE RNUM &gt; #{offset}
+  </select>
+
+  <select id="countAllByChallengeIdWithFilter" resultType="long">
+    SELECT COUNT(*)
+    FROM woorido.meeting_votes mv
+    JOIN woorido.meetings m ON mv.meeting_id = m.id
+    WHERE m.challenge_id = #{challengeId}
+    <if test="status != null">
+      AND mv.status = #{status}
+    </if>
+    <if test="type != null">
+      AND 'MEETING_ATTENDANCE' = #{type}
+    </if>
+  </select>
+
+  <select id="checkVoteRecordExisting" resultType="int">
+    SELECT COUNT(*)
+    FROM woorido.meeting_vote_records
+    WHERE meeting_vote_id = #{voteId}
+      AND user_id = #{userId}
+  </select>
+
+  <insert id="insertVoteRecord">
+    INSERT INTO woorido.meeting_vote_records (
+      id, meeting_vote_id, user_id, choice, created_at
+    ) VALUES (
+      #{id}, #{voteId}, #{userId}, #{choice}, CURRENT_TIMESTAMP
+    )
+  </insert>
+
+  <select id="findMyVote" resultType="string">
+    SELECT choice
+    FROM woorido.meeting_vote_records
+    WHERE meeting_vote_id = #{voteId}
+      AND user_id = #{userId}
+  </select>
+
+  <select id="findVoteCounts" resultType="java.util.Map">
+    SELECT
+      (SELECT COUNT(*) FROM woorido.meeting_vote_records WHERE meeting_vote_id = #{voteId} AND choice = 'AGREE') AS AGREE,
+      (SELECT COUNT(*) FROM woorido.meeting_vote_records WHERE meeting_vote_id = #{voteId} AND choice = 'DISAGREE') AS DISAGREE,
+      (SELECT COUNT(*) FROM woorido.meeting_vote_records WHERE meeting_vote_id = #{voteId}) AS TOTAL
+    FROM DUAL
+  </select>
+
+  <update id="updateStatus">
+    UPDATE woorido.meeting_votes
+    SET status = #{status},
+        closed_at = SYSTIMESTAMP
+    WHERE id = #{voteId}
+  </update>
+
+  <update id="expirePendingVotes">
+    UPDATE woorido.meeting_votes
+    SET status = 'EXPIRED',
+        closed_at = SYSTIMESTAMP
+    WHERE status IN ('PENDING', 'OPEN', 'IN_PROGRESS')
+      AND expires_at IS NOT NULL
+      AND expires_at &lt; SYSTIMESTAMP
+  </update>
+
+</mapper>

@@ -1,0 +1,47 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--color-white);
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  position: relative;
+  /* TopNav is sticky, so body sits naturally in flow, but SideNav is fixed top:60px */
+}
+
+.main {
+  flex: 1;
+  /* width: 100%; REMOVED to prevent horizontal scroll */
+  /* margin-top: 60px; REMOVED (TopNav consumes space in flex flow) */
+  /* Clear Fixed Header */
+  transition: margin-left var(--motion-duration-slow) var(--motion-ease-standard);
+  min-height: calc(100vh - 60px);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.mainShifted {
+  margin-left: 240px;
+  width: calc(100% - 240px);
+}
+
+.mainCollapsed {
+  margin-left: 72px;
+  width: calc(100% - 72px);
+}
+
+
+
+@media (max-width: 768px) {
+
+  .mainShifted,
+  .mainCollapsed {
+    margin-left: 0;
+    /* Mobile: sidebar is overlay */
+  }
+
+}

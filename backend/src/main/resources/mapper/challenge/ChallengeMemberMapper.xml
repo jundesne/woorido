@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.woorido.challenge.repository.ChallengeMemberMapper">
+  <!-- Learning note: SQL ids in this mapper must match Java Mapper method names. -->
+
+  <insert id="insert">
+    INSERT INTO woorido.challenge_members (
+      id,
+      challenge_id,
+      user_id,
+      role,
+      deposit_status,
+      entry_fee_amount,
+      privilege_status,
+      total_support_paid,
+      auto_pay_enabled,
+      joined_at
+    ) VALUES (
+      #{id},
+      #{challengeId},
+      #{userId},
+      #{role},
+      #{depositStatus},
+      #{entryFeeAmount},
+      #{privilegeStatus},
+      #{totalSupportPaid},
+      #{autoPayEnabled},
+      #{joinedAt}
+    )
+  </insert>
+
+  <select id="findById" resultType="com.woorido.challenge.domain.ChallengeMember">
+    SELECT 
+        id,
+        challenge_id as challengeId,
+        user_id as userId,
+        role,
+        joined_at as joinedAt,
+        privilege_status as privilegeStatus
+    FROM woorido.challenge_members
+    WHERE id = #{id, jdbcType=VARCHAR}
+  </select>
+
+  <select id="findByUserIdAndChallengeId" resultType="java.util.Map">
+    SELECT 
+        id as MEMBER_ID,
+        challenge_id as CHALLENGE_ID,
+        user_id as USER_ID,
+        role as ROLE,
+        joined_at as JOINED_AT,
+        privilege_status as STATUS
+    FROM woorido.challenge_members
+    WHERE user_id = #{userId, jdbcType=VARCHAR}
+    AND challenge_id = #{challengeId, jdbcType=VARCHAR}
+  </select>
+
+  <update id="updateRejoinMember" parameterType="com.woorido.challenge.domain.ChallengeMember">
+    UPDATE woorido.challenge_members
+    SET challenge_id = #{challengeId},
+        user_id = #{userId},
+        role = #{role},
+        joined_at = #{joinedAt},
+        privilege_status = 'ACTIVE',
+        deposit_status = #{depositStatus},
+        entry_fee_amount = #{entryFeeAmount},
+        total_support_paid = #{totalSupportPaid},
+        auto_pay_enabled = #{autoPayEnabled},
+        left_at = NULL
+    WHERE id = #{id}
+  </update>
+
+  <update id="updateLeaveMember">
+    UPDATE woorido.challenge_members
+    SET privilege_status = 'LEFT',
+        left_at = CURRENT_TIMESTAMP,
+        leave_reason = #{leaveReason},
+        deposit_status = 'RELEASED'
+    WHERE challenge_id = #{challengeId}
+      AND user_id = #{userId}
+      AND privilege_status != 'LEFT'
+  </update>
+
+  <select id="countByChallengeId" resultType="int">
+    SELECT COUNT(*)
+    FROM woorido.challenge_members
+    WHERE challenge_id = #{challengeId}
+    AND privilege_status = 'ACTIVE'
+  </select>
+
+  <select id="findAllActiveMembers" resultType="java.util.Map">
+    SELECT 
+        cm.user_id as USER_ID,
+        u.nickname as NICKNAME,
+        cm.joined_at as JOINED_AT,
+        cm.role as ROLE
+    FROM woorido.challenge_members cm
+    JOIN woorido.users u ON cm.user_id = u.id
+    WHERE cm.challenge_id = #{challengeId}
+    AND cm.privilege_status = 'ACTIVE'
+    ORDER BY cm.joined_at ASC
+  </select>
+
+  <select id="findMembersWithUserInfo" resultType="java.util.Map">
+    SELECT 
+        cm.id as MEMBER_ID,
+        cm.user_id as USER_ID,
+        u.nickname as NICKNAME,
+        NVL(us.total_score, 12) as BRIX,
+        cm.role as ROLE,
+        cm.joined_at as JOINED_AT,
+        cm.privilege_status as STATUS,
+        cm.deposit_status as DEPOSIT_STATUS,
+        cm.last_support_paid_at as LAST_SUPPORT_PAID_AT,
+        u.profile_image_url as PROFILE_IMAGE
+    FROM woorido.challenge_members cm
+    JOIN woorido.users u ON cm.user_id = u.id
+    LEFT JOIN woorido.user_scores us ON us.user_id = cm.user_id
+    WHERE cm.challenge_id = #{challengeId}
+    <if test="status != null and status != ''">
+      AND cm.privilege_status = #{status}
+    </if>
+    ORDER BY 
+        CASE WHEN cm.role = 'LEADER' THEN 1 ELSE 2 END,
+        cm.joined_at ASC
+  </select>
+
+  <!-- 자동 납입 설정 업데이트 -->
+  <update id="updateAutoPayEnabled">
+    UPDATE woorido.challenge_members
+    SET auto_pay_enabled = #{autoPayEnabled}
+    WHERE user_id = #{userId} AND challenge_id = #{challengeId}
+  </update>
+
+  <!-- 멤버 상세 정보 조회 -->
+  <select id="findMemberDetail" resultType="java.util.Map">
+    SELECT 
+        cm.id as MEMBER_ID,
+        cm.user_id as USER_ID,
+        cm.role as ROLE,
+        cm.privilege_status as STATUS,
+        cm.joined_at as JOINED_AT,
+        cm.total_support_paid as TOTAL_SUPPORT_PAID,
+        u.nickname as NICKNAME,
+        u.profile_image_url as PROFILE_IMAGE,
+        COALESCE(us.total_score, 12) as BRIX
+    FROM woorido.challenge_members cm
+    JOIN woorido.users u ON cm.user_id = u.id
+    LEFT JOIN woorido.user_scores us ON u.id = us.user_id
+    WHERE cm.challenge_id = #{challengeId}
+      AND cm.id = #{memberId}
+  </select>
+
+  <update id="leaveChallenge">
+    UPDATE woorido.challenge_members
+    SET privilege_status = 'LEFT',
+        left_at = CURRENT_TIMESTAMP,
+        deposit_status = 'RELEASED'
+    WHERE challenge_id = #{challengeId, jdbcType=VARCHAR} AND user_id = #{userId, jdbcType=VARCHAR}
+  </update>
+
+  <update id="updateRole">
+    UPDATE woorido.challenge_members
+    SET role = #{newRole, jdbcType=VARCHAR}
+    WHERE id = #{memberId, jdbcType=VARCHAR}
+      AND challenge_id = #{challengeId, jdbcType=VARCHAR}
+  </update>
+
+  <select id="findTopBrixActiveMemberExcludingUser" resultType="java.util.Map">
+    SELECT
+      MEMBER_ID,
+      USER_ID,
+      JOINED_AT,
+      BRIX
+    FROM (
+      SELECT
+        cm.id AS MEMBER_ID,
+        cm.user_id AS USER_ID,
+        cm.joined_at AS JOINED_AT,
+        NVL(us.total_score, 12) AS BRIX
+      FROM woorido.challenge_members cm
+      LEFT JOIN woorido.user_scores us ON us.user_id = cm.user_id
+      WHERE cm.challenge_id = #{challengeId}
+        AND cm.privilege_status = 'ACTIVE'
+        AND cm.user_id != #{excludedUserId}
+      ORDER BY NVL(us.total_score, 12) DESC, cm.joined_at ASC
+    )
+    WHERE ROWNUM = 1
+  </select>
+
+  <select id="getPrivilegeStatus" resultType="String">
+    SELECT privilege_status
+    FROM woorido.challenge_members
+    WHERE challenge_id = #{challengeId} AND user_id = #{userId}
+  </select>
+
+  <update id="updatePrivilegeStatus">
+    UPDATE woorido.challenge_members
+    SET privilege_status = #{status},
+        privilege_revoked_at = CASE WHEN #{status} = 'REVOKED' THEN SYSTIMESTAMP ELSE NULL END
+    WHERE challenge_id = #{challengeId} AND user_id = #{userId}
+  </update>
+
+  <update id="updateDepositStatus">
+    UPDATE woorido.challenge_members
+    SET deposit_status = #{depositStatus}
+    WHERE challenge_id = #{challengeId} AND user_id = #{userId}
+  </update>
+
+  <select id="findAllByChallengeId" resultType="com.woorido.challenge.domain.ChallengeMember">
+    SELECT 
+        id,
+        challenge_id as challengeId,
+        user_id as userId,
+        role,
+        joined_at as joinedAt,
+        privilege_status as privilegeStatus,
+        last_support_paid_at as lastSupportPaidAt
+    FROM woorido.challenge_members
+    WHERE challenge_id = #{challengeId}
+  </select>
+
+</mapper>

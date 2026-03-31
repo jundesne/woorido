@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.woorido.meeting.repository.MeetingMapper">
+  <!-- Learning note: SQL ids in this mapper must match Java Mapper method names. -->
+
+  <insert id="insert" parameterType="com.woorido.meeting.domain.Meeting">
+    INSERT INTO woorido.meetings (
+      id,
+      challenge_id,
+      title,
+      description,
+      location,
+      location_detail,
+      meeting_date,
+      status,
+      created_by,
+      created_at,
+      updated_at
+    ) VALUES (
+      #{id},
+      #{challengeId},
+      #{title}, #{description,jdbcType=VARCHAR}, #{location,jdbcType=VARCHAR}, #{locationDetail,jdbcType=VARCHAR},
+      #{meetingDate},
+      #{status},
+      #{createdBy},
+      #{createdAt},
+      #{updatedAt}
+    )
+  </insert>
+
+  <select id="findAllByChallengeIdWithFilter" resultType="java.util.Map">
+    SELECT * FROM (
+      SELECT A.*, ROWNUM AS RNUM FROM (
+        SELECT 
+            m.id as MEETING_ID,
+            m.title as TITLE,
+            m.description as DESCRIPTION,
+            m.status as STATUS,
+            m.meeting_date as MEETING_DATE,
+            m.location as LOCATION,
+            m.location_detail as LOCATION_DETAIL,
+            m.created_at as CREATED_AT,
+            (SELECT COUNT(*) FROM woorido.meeting_votes mv 
+             JOIN woorido.meeting_vote_records mvr ON mv.id = mvr.meeting_vote_id 
+             WHERE mv.meeting_id = m.id AND mvr.choice = 'AGREE') as CONFIRMED_COUNT,
+            (SELECT COUNT(*) FROM woorido.challenge_members cm WHERE cm.challenge_id = m.challenge_id AND cm.privilege_status = 'ACTIVE') as TOTAL_MEMBERS
+        FROM woorido.meetings m
+        WHERE m.challenge_id = #{challengeId}
+    <if test="status != null and !'N'.equals(status)">
+            AND m.status = #{status}
+    </if>
+        ORDER BY m.meeting_date DESC
+      ) A WHERE ROWNUM &lt;= (#{offset} + #{limit})
+    ) WHERE RNUM &gt; #{offset}
+  </select>
+
+  <select id="countAllByChallengeIdWithFilter" resultType="long">
+    SELECT COUNT(*)
+    FROM woorido.meetings
+    WHERE challenge_id = #{challengeId}
+    <if test="status != null and !'N'.equals(status)">
+        AND status = #{status}
+    </if>
+  </select>
+
+  <select id="findById" resultType="java.util.Map">
+    SELECT 
+        m.id as MEETING_ID,
+        m.challenge_id as CHALLENGE_ID,
+        m.title as TITLE,
+        m.description as DESCRIPTION,
+        m.status as STATUS,
+        m.meeting_date as MEETING_DATE,
+        m.location as LOCATION,
+        m.location_detail as LOCATION_DETAIL,
+        m.created_at as CREATED_AT,
+        m.created_by as CREATOR_ID,
+        (SELECT u.nickname FROM woorido.users u WHERE u.id = m.created_by) as CREATOR_NICKNAME,
+        (SELECT COUNT(*) FROM woorido.meeting_votes mv JOIN woorido.meeting_vote_records mvr ON mv.id = mvr.meeting_vote_id WHERE mv.meeting_id = m.id AND mvr.choice = 'AGREE') as CONFIRMED_COUNT,
+        (SELECT COUNT(*) FROM woorido.meeting_votes mv JOIN woorido.meeting_vote_records mvr ON mv.id = mvr.meeting_vote_id WHERE mv.meeting_id = m.id AND mvr.choice = 'DISAGREE') as DECLINED_COUNT,
+        (SELECT COUNT(*) FROM woorido.meeting_votes mv JOIN woorido.meeting_vote_records mvr ON mv.id = mvr.meeting_vote_id WHERE mv.meeting_id = m.id AND mvr.choice = 'PENDING') as PENDING_COUNT,
+        (SELECT COUNT(*) FROM woorido.challenge_members cm WHERE cm.challenge_id = m.challenge_id AND cm.privilege_status = 'ACTIVE') as TOTAL_MEMBERS
+    FROM woorido.meetings m
+    WHERE m.id = #{meetingId}
+  </select>
+
+  <update id="update" parameterType="com.woorido.meeting.domain.Meeting">
+    UPDATE woorido.meetings
+    <set>
+      <if test="title != null">title = #{title},</if>
+      <if test="description != null">description = #{description},</if>
+      <if test="location != null">location = #{location},</if>
+      <if test="locationDetail != null">location_detail = #{locationDetail},</if>
+      <if test="meetingDate != null">meeting_date = #{meetingDate},</if>
+      <if test="updatedAt != null">updated_at = #{updatedAt}</if>
+    </set>
+    WHERE id = #{id}
+  </update>
+
+  <update id="complete" parameterType="com.woorido.meeting.domain.Meeting">
+    UPDATE woorido.meetings
+    SET
+      status = 'COMPLETED',
+      completed_at = #{completedAt},
+      updated_at = #{updatedAt}
+    WHERE id = #{id}
+  </update>
+
+  <delete id="deleteById">
+    DELETE FROM woorido.meetings
+    WHERE id = #{meetingId}
+  </delete>
+
+  <select id="countAttendees" resultType="int">
+    SELECT COUNT(*)
+    FROM woorido.meeting_votes mv
+    JOIN woorido.meeting_vote_records mvr ON mv.id = mvr.meeting_vote_id
+    WHERE mv.meeting_id = #{meetingId}
+      AND mvr.choice = 'AGREE'
+  </select>
+
+  <select id="isAttendee" resultType="int">
+    SELECT COUNT(*)
+    FROM woorido.meeting_votes mv
+    JOIN woorido.meeting_vote_records mvr ON mv.id = mvr.meeting_vote_id
+    WHERE mv.meeting_id = #{meetingId}
+      AND mvr.user_id = #{userId}
+      AND mvr.choice = 'AGREE'
+  </select>
+
+  <select id="countActualAttendees" resultType="int">
+    SELECT COUNT(*)
+    FROM woorido.meeting_votes mv
+    JOIN woorido.meeting_vote_records mvr ON mv.id = mvr.meeting_vote_id
+    JOIN woorido.meetings m ON m.id = mv.meeting_id
+    WHERE mv.meeting_id = #{meetingId}
+      AND m.status = 'COMPLETED'
+      AND mvr.actual_attendance = 'ATTENDED'
+  </select>
+
+  <select id="isActualAttendee" resultType="int">
+    SELECT COUNT(*)
+    FROM woorido.meeting_votes mv
+    JOIN woorido.meeting_vote_records mvr ON mv.id = mvr.meeting_vote_id
+    JOIN woorido.meetings m ON m.id = mv.meeting_id
+    WHERE mv.meeting_id = #{meetingId}
+      AND mvr.user_id = #{userId}
+      AND m.status = 'COMPLETED'
+      AND mvr.actual_attendance = 'ATTENDED'
+  </select>
+
+  <select id="findAttendeesByMeetingId" resultType="java.util.Map">
+    SELECT
+        u.id as USER_ID,
+        u.nickname as NICKNAME,
+        u.profile_image_url as PROFILE_IMAGE,
+        mvr.attendance_confirmed_at as JOINED_AT
+    FROM woorido.meeting_votes mv
+    JOIN woorido.meeting_vote_records mvr ON mv.id = mvr.meeting_vote_id
+    JOIN woorido.users u ON mvr.user_id = u.id
+    WHERE mv.meeting_id = #{meetingId}
+      AND mvr.choice = 'AGREE'
+    ORDER BY mvr.attendance_confirmed_at ASC
+  </select>
+
+  <select id="countCompletedMeetingsSince" resultType="int">
+    SELECT COUNT(*)
+    FROM woorido.meetings
+    WHERE challenge_id = #{challengeId}
+      AND created_by = #{userId}
+      AND status = 'COMPLETED'
+      AND completed_at IS NOT NULL
+      AND completed_at &gt;= #{since}
+  </select>
+
+  <select id="countCompletedMeetingsByChallengeId" resultType="int">
+    SELECT COUNT(*)
+    FROM woorido.meetings
+    WHERE challenge_id = #{challengeId}
+      AND status = 'COMPLETED'
+      AND completed_at IS NOT NULL
+  </select>
+
+  <select id="countAttendedCompletedMeetingsByChallengeIdAndUserId" resultType="int">
+    SELECT COUNT(DISTINCT m.id)
+    FROM woorido.meetings m
+    JOIN woorido.meeting_votes mv ON mv.meeting_id = m.id
+    JOIN woorido.meeting_vote_records mvr ON mvr.meeting_vote_id = mv.id
+    WHERE m.challenge_id = #{challengeId}
+      AND m.status = 'COMPLETED'
+      AND m.completed_at IS NOT NULL
+      AND mvr.user_id = #{userId}
+      AND mvr.actual_attendance = 'ATTENDED'
+  </select>
+
+</mapper>
+

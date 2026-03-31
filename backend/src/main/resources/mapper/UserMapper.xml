@@ -1,0 +1,282 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.woorido.common.mapper.UserMapper">
+
+    <resultMap id="UserResultMap" type="com.woorido.common.entity.User">
+        <id property="id" column="id"/>
+        <result property="email" column="email"/>
+        <result property="passwordHash" column="password_hash"/>
+        <result property="name" column="name"/>
+        <result property="nickname" column="nickname"/>
+        <result property="phone" column="phone"/>
+        <result property="profileImageUrl" column="profile_image_url"/>
+        <result property="birthDate" column="birth_date"/>
+        <result property="gender" column="gender"/>
+        <result property="bio" column="bio"/>
+        <result property="isVerified" column="is_verified"/>
+        <result property="verificationToken" column="verification_token"/>
+        <result property="verificationTokenExpires" column="verification_token_expires"/>
+        <result property="socialProvider" column="social_provider"/>
+        <result property="socialId" column="social_id"/>
+        <result property="passwordResetToken" column="password_reset_token"/>
+        <result property="passwordResetExpires" column="password_reset_expires"/>
+        <result property="failedLoginAttempts" column="failed_login_attempts"/>
+        <result property="lockedUntil" column="locked_until"/>
+        <result property="accountStatus" column="account_status"/>
+        <result property="suspendedAt" column="suspended_at"/>
+        <result property="suspendedUntil" column="suspended_until"/>
+        <result property="suspensionReason" column="suspension_reason"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="lastLoginAt" column="last_login_at"/>
+        <result property="agreedTerms" column="agreed_terms"/>
+        <result property="agreedPrivacy" column="agreed_privacy"/>
+        <result property="agreedMarketing" column="agreed_marketing"/>
+        <result property="termsAgreedAt" column="terms_agreed_at"/>
+    </resultMap>
+
+    <sql id="UserColumns">
+        id,
+        email,
+        password_hash,
+        name,
+        nickname,
+        phone,
+        profile_image_url,
+        birth_date,
+        gender,
+        bio,
+        is_verified,
+        verification_token,
+        verification_token_expires,
+        social_provider,
+        social_id,
+        password_reset_token,
+        password_reset_expires,
+        failed_login_attempts,
+        locked_until,
+        account_status,
+        suspended_at,
+        suspended_until,
+        suspension_reason,
+        created_at,
+        updated_at,
+        last_login_at,
+        agreed_terms,
+        agreed_privacy,
+        agreed_marketing,
+        terms_agreed_at
+    </sql>
+
+    <!-- ID로 사용자 조회 -->
+    <select id="findById" resultMap="UserResultMap">
+        SELECT <include refid="UserColumns"/>
+        FROM woorido.users
+        WHERE id = #{id}
+    </select>
+
+    <!-- 이메일로 사용자 조회 (로그인용) -->
+    <select id="findByEmail" resultMap="UserResultMap">
+        SELECT <include refid="UserColumns"/>
+        FROM woorido.users
+        WHERE email = #{email}
+    </select>
+
+    <!-- 소셜 제공자 + 소셜 ID로 사용자 조회 -->
+    <select id="findBySocial" resultMap="UserResultMap">
+        SELECT <include refid="UserColumns"/>
+        FROM woorido.users
+        WHERE social_provider = #{socialProvider}
+          AND social_id = #{socialId}
+    </select>
+
+    <!-- 이메일 중복 체크 (회원가입용) -->
+    <select id="countByEmail" resultType="int">
+        SELECT COUNT(*) FROM woorido.users WHERE email = #{email}
+    </select>
+
+    <!-- 회원가입 - 사용자 등록 -->
+    <insert id="insertUser" parameterType="com.woorido.common.entity.User">
+        INSERT INTO woorido.users (
+            id, email, password_hash, name, nickname, phone, birth_date,
+            social_provider, social_id,
+            account_status, agreed_terms, agreed_privacy, agreed_marketing,
+            created_at, failed_login_attempts
+        ) VALUES (
+            #{id}, #{email}, #{passwordHash}, #{name}, #{nickname}, #{phone}, #{birthDate, jdbcType=DATE},
+            #{socialProvider, jdbcType=VARCHAR}, #{socialId, jdbcType=VARCHAR},
+            #{accountStatus}, #{agreedTerms}, #{agreedPrivacy}, #{agreedMarketing},
+            #{createdAt}, 0
+        )
+    </insert>
+
+    <!-- 마지막 로그인 시간 업데이트 -->
+    <update id="updateLastLoginAt">
+        UPDATE woorido.users SET last_login_at = CURRENT_TIMESTAMP WHERE id = #{id}
+    </update>
+
+    <!-- 로그인 실패 횟수 증가 -->
+    <update id="incrementFailedLoginAttempts">
+        UPDATE woorido.users SET failed_login_attempts = failed_login_attempts + 1 WHERE id = #{id}
+    </update>
+
+    <!-- 로그인 실패 횟수 초기화 -->
+    <update id="resetFailedLoginAttempts">
+        UPDATE woorido.users SET failed_login_attempts = 0 WHERE id = #{id}
+    </update>
+
+    <!-- 계정 잠금 -->
+    <update id="lockAccount">
+        UPDATE woorido.users SET locked_until = #{lockedUntil} WHERE id = #{id}
+    </update>
+
+    <!-- 비밀번호 재설정 토큰 저장 -->
+    <update id="updatePasswordResetToken">
+        UPDATE woorido.users 
+        SET password_reset_token = #{resetToken}, 
+            password_reset_expires = #{expiresAt}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 닉네임 중복 체크 (본인 제외) -->
+    <select id="countByNicknameExcludingUser" resultType="int">
+        SELECT COUNT(*) FROM woorido.users 
+        WHERE nickname = #{nickname} AND id != #{userId}
+    </select>
+
+    <!-- 사용자 프로필 업데이트 -->
+    <update id="updateUserProfile">
+        UPDATE woorido.users 
+        SET nickname = COALESCE(#{nickname,jdbcType=VARCHAR}, nickname),
+            phone = COALESCE(#{phone,jdbcType=VARCHAR}, phone),
+            profile_image_url = COALESCE(#{profileImage,jdbcType=VARCHAR}, profile_image_url),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <!-- 소셜 온보딩 완료 -->
+    <update id="completeSocialOnboarding">
+        UPDATE woorido.users
+        SET nickname = #{nickname, jdbcType=VARCHAR},
+            phone = #{phone, jdbcType=VARCHAR},
+            agreed_terms = 'Y',
+            agreed_privacy = 'Y',
+            agreed_marketing = #{agreedMarketing, jdbcType=VARCHAR},
+            terms_agreed_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id, jdbcType=VARCHAR}
+    </update>
+
+    <!-- 닉네임 중복 체크 (전체) -->
+    <select id="countByNickname" resultType="int">
+        SELECT COUNT(*) FROM woorido.users WHERE nickname = #{nickname}
+    </select>
+
+    <!-- 사용자 상태 업데이트 (탈퇴 등) -->
+    <update id="updateAccountStatus">
+        UPDATE woorido.users
+        SET account_status = #{status, jdbcType=VARCHAR},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id, jdbcType=VARCHAR}
+    </update>
+
+    <!-- 기존 계정에 소셜 로그인 정보 연결 -->
+    <update id="linkSocialAccount">
+        UPDATE woorido.users
+        SET social_provider = #{socialProvider, jdbcType=VARCHAR},
+            social_id = #{socialId, jdbcType=VARCHAR},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id, jdbcType=VARCHAR}
+    </update>
+
+    <!-- 비밀번호 재설정 토큰으로 사용자 조회 -->
+    <select id="findByPasswordResetToken" resultMap="UserResultMap">
+        SELECT <include refid="UserColumns"/>
+        FROM woorido.users
+        WHERE password_reset_token = #{token}
+    </select>
+
+    <!-- 비밀번호 변경 -->
+    <update id="updatePassword">
+        UPDATE woorido.users 
+        SET password_hash = #{password},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <!-- 비밀번호 재설정 토큰 초기화 -->
+    <update id="clearPasswordResetToken">
+        UPDATE woorido.users 
+        SET password_reset_token = NULL,
+            password_reset_expires = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <!-- 사용자가 참여 중인 챌린지 수 -->
+    <select id="countChallengesByUserId" resultType="int">
+        SELECT COUNT(*) FROM woorido.challenge_members
+        WHERE user_id = #{userId} AND privilege_status = 'ACTIVE'
+    </select>
+
+    <!-- 사용자가 완료한 챌린지 수 -->
+    <select id="countCompletedChallengesByUserId" resultType="int">
+        SELECT COUNT(*) FROM woorido.challenge_members cm
+        JOIN woorido.challenges c ON cm.challenge_id = c.id
+        WHERE cm.user_id = #{userId} AND c.status = 'COMPLETED'
+    </select>
+
+    <!-- 사용자의 총 서포트 금액 -->
+    <select id="sumTotalSupportAmountByUserId" resultType="long">
+        SELECT NVL(SUM(at2.amount), 0) FROM woorido.account_transactions at2
+        JOIN woorido.accounts a ON at2.account_id = a.id
+        WHERE a.user_id = #{userId} AND at2.type IN ('SUPPORT', 'SUPPORT_AUTO')
+    </select>
+
+    <!-- 사용자 당도(브릭스) 조회 -->
+    <select id="findTotalScoreByUserId" resultType="java.lang.Double">
+        SELECT total_score
+        FROM woorido.user_scores
+        WHERE user_id = #{userId}
+    </select>
+
+    <!-- 회원가입 시 초기 당도 레코드 생성 -->
+    <insert id="insertInitialUserScore">
+        INSERT INTO woorido.user_scores (
+            id, user_id, total_score, created_at, updated_at
+        ) VALUES (
+            #{id}, #{userId}, #{totalScore}, SYSTIMESTAMP, SYSTIMESTAMP
+        )
+    </insert>
+
+    <!-- 당도 점수 업서트 (월 배치 반영) -->
+    <update id="upsertTotalScoreByUserId">
+        MERGE INTO woorido.user_scores us
+        USING (
+            SELECT
+                #{id} AS id,
+                #{userId} AS user_id,
+                #{totalScore} AS total_score,
+                #{calculatedAt} AS calculated_at,
+                #{calculatedMonth} AS calculated_month
+            FROM dual
+        ) src
+        ON (us.user_id = src.user_id)
+        WHEN MATCHED THEN
+            UPDATE SET
+                us.total_score = src.total_score,
+                us.calculated_at = src.calculated_at,
+                us.calculated_month = src.calculated_month,
+                us.updated_at = SYSTIMESTAMP
+        WHEN NOT MATCHED THEN
+            INSERT (
+                id, user_id, total_score, calculated_at, calculated_month, created_at, updated_at
+            )
+            VALUES (
+                src.id, src.user_id, src.total_score, src.calculated_at, src.calculated_month, SYSTIMESTAMP, SYSTIMESTAMP
+            )
+    </update>
+
+</mapper>

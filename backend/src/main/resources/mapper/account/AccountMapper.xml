@@ -1,0 +1,236 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.woorido.account.repository.AccountMapper">
+
+    <resultMap id="AccountResultMap" type="com.woorido.account.domain.Account">
+        <id property="id" column="id" />
+        <result property="userId" column="user_id" />
+        <result property="balance" column="balance" />
+        <result property="lockedBalance" column="locked_balance" />
+        <result property="bankCode" column="bank_code" />
+        <result property="accountNumber" column="account_number" />
+        <result property="accountHolder" column="account_holder" />
+        <result property="version" column="version" />
+        <result property="createdAt" column="created_at" />
+        <result property="updatedAt" column="updated_at" />
+    </resultMap>
+
+    <select id="findByUserId" parameterType="string" resultMap="AccountResultMap">
+        SELECT
+            id,
+            user_id,
+            balance,
+            locked_balance,
+            bank_code,
+            account_number,
+            account_holder,
+            version,
+            created_at,
+            updated_at
+        FROM woorido.accounts
+        WHERE user_id = #{userId}
+    </select>
+
+    <insert id="save" parameterType="com.woorido.account.domain.Account">
+        INSERT INTO woorido.accounts (
+            id, user_id, balance, locked_balance, bank_code, account_number, account_holder, version, created_at, updated_at
+        ) VALUES (
+            #{id}, #{userId}, #{balance}, #{lockedBalance}, #{bankCode, jdbcType=VARCHAR}, #{accountNumber, jdbcType=VARCHAR}, #{accountHolder, jdbcType=VARCHAR}, #{version}, SYSTIMESTAMP, SYSTIMESTAMP
+        )
+    </insert>
+
+    <update id="update" parameterType="com.woorido.account.domain.Account">
+        UPDATE woorido.accounts
+        SET
+            balance = #{balance},
+            locked_balance = #{lockedBalance},
+            version = version + 1,
+            updated_at = SYSTIMESTAMP
+        WHERE id = #{id} AND version = #{version}
+    </update>
+
+    <resultMap id="AccountTransactionResultMap" type="com.woorido.account.domain.AccountTransaction">
+        <id property="id" column="id" />
+        <result property="accountId" column="account_id" />
+        <result property="type" column="type" />
+        <result property="amount" column="amount" />
+        <result property="balanceBefore" column="balance_before" />
+        <result property="balanceAfter" column="balance_after" />
+        <result property="lockedBefore" column="locked_before" />
+        <result property="lockedAfter" column="locked_after" />
+        <result property="idempotencyKey" column="idempotency_key" />
+        <result property="relatedChallengeId" column="related_challenge_id" />
+        <result property="relatedUserId" column="related_user_id" />
+        <result property="description" column="description" />
+        <result property="pgProvider" column="pg_provider" />
+        <result property="pgTxId" column="pg_tx_id" />
+        <result property="createdAt" column="created_at" />
+    </resultMap>
+
+    <select id="findTransactions" parameterType="com.woorido.account.dto.request.TransactionSearchRequest" resultMap="AccountTransactionResultMap">
+        SELECT
+            id,
+            account_id,
+            type,
+            amount,
+            balance_before,
+            balance_after,
+            locked_before,
+            locked_after,
+            idempotency_key,
+            related_challenge_id,
+            related_user_id,
+            description,
+            pg_provider,
+            pg_tx_id,
+            created_at
+        FROM (
+            SELECT
+                t.id,
+                t.account_id,
+                t.type,
+                t.amount,
+                t.balance_before,
+                t.balance_after,
+                t.locked_before,
+                t.locked_after,
+                t.idempotency_key,
+                t.related_challenge_id,
+                t.related_user_id,
+                t.description,
+                t.pg_provider,
+                t.pg_tx_id,
+                t.created_at,
+                ROWNUM AS rn
+            FROM (
+                SELECT
+                    at.id,
+                    at.account_id,
+                    at.type,
+                    at.amount,
+                    at.balance_before,
+                    at.balance_after,
+                    at.locked_before,
+                    at.locked_after,
+                    at.idempotency_key,
+                    at.related_challenge_id,
+                    at.related_user_id,
+                    at.description,
+                    at.pg_provider,
+                    at.pg_tx_id,
+                    at.created_at
+                FROM woorido.account_transactions at
+                WHERE at.account_id = #{accountId}
+                <if test="type != null and type != ''">
+                    AND at.type = #{type}
+                </if>
+                <if test="startDate != null and startDate != ''">
+                    AND at.created_at >= TO_TIMESTAMP(#{startDate} || ' 00:00:00', 'YYYY-MM-DD HH24:MI:SS')
+                </if>
+                <if test="endDate != null and endDate != ''">
+                    AND at.created_at &lt;= TO_TIMESTAMP(#{endDate} || ' 23:59:59', 'YYYY-MM-DD HH24:MI:SS')
+                </if>
+                ORDER BY at.created_at DESC
+            ) t
+            WHERE ROWNUM &lt;= (#{page} + 1) * #{size}
+        )
+        WHERE rn &gt; #{page} * #{size}
+    </select>
+
+    <select id="countTransactions" parameterType="com.woorido.account.dto.request.TransactionSearchRequest" resultType="long">
+        SELECT COUNT(*)
+        FROM woorido.account_transactions at
+        WHERE at.account_id = #{accountId}
+        <if test="type != null and type != ''">
+            AND at.type = #{type}
+        </if>
+        <if test="startDate != null and startDate != ''">
+            AND at.created_at >= TO_TIMESTAMP(#{startDate} || ' 00:00:00', 'YYYY-MM-DD HH24:MI:SS')
+        </if>
+        <if test="endDate != null and endDate != ''">
+            AND at.created_at &lt;= TO_TIMESTAMP(#{endDate} || ' 23:59:59', 'YYYY-MM-DD HH24:MI:SS')
+        </if>
+    </select>
+
+    <select id="sumAmountsByDirection" parameterType="com.woorido.account.dto.request.TransactionSearchRequest" resultType="java.util.HashMap">
+        SELECT
+            NVL(SUM(CASE WHEN amount &gt; 0 THEN amount ELSE 0 END), 0) AS totalIncome,
+            NVL(SUM(CASE WHEN amount &lt; 0 THEN ABS(amount) ELSE 0 END), 0) AS totalExpense
+        FROM woorido.account_transactions at
+        WHERE at.account_id = #{accountId}
+        <if test="type != null and type != ''">
+            AND at.type = #{type}
+        </if>
+        <if test="startDate != null and startDate != ''">
+            AND at.created_at >= TO_TIMESTAMP(#{startDate} || ' 00:00:00', 'YYYY-MM-DD HH24:MI:SS')
+        </if>
+        <if test="endDate != null and endDate != ''">
+            AND at.created_at &lt;= TO_TIMESTAMP(#{endDate} || ' 23:59:59', 'YYYY-MM-DD HH24:MI:SS')
+        </if>
+    </select>
+
+    <select id="sumWithdrawalsToday" parameterType="string" resultType="long">
+        SELECT NVL(SUM(ABS(amount)), 0)
+        FROM woorido.account_transactions
+        WHERE account_id = #{accountId}
+          AND type = 'WITHDRAW'
+          AND created_at &gt;= TRUNC(SYSTIMESTAMP)
+          AND created_at &lt; TRUNC(SYSTIMESTAMP) + 1
+    </select>
+
+    <select id="sumWithdrawalsThisMonth" parameterType="string" resultType="long">
+        SELECT NVL(SUM(ABS(amount)), 0)
+        FROM woorido.account_transactions
+        WHERE account_id = #{accountId}
+          AND type = 'WITHDRAW'
+          AND created_at &gt;= TRUNC(SYSTIMESTAMP, 'MM')
+          AND created_at &lt; ADD_MONTHS(TRUNC(SYSTIMESTAMP, 'MM'), 1)
+    </select>
+
+    <select id="sumOutgoingToday" parameterType="string" resultType="long">
+        SELECT NVL(SUM(ABS(amount)), 0)
+        FROM woorido.account_transactions
+        WHERE account_id = #{accountId}
+          AND amount &lt; 0
+          AND created_at &gt;= TRUNC(SYSTIMESTAMP)
+          AND created_at &lt; TRUNC(SYSTIMESTAMP) + 1
+    </select>
+
+    <select id="sumOutgoingThisMonth" parameterType="string" resultType="long">
+        SELECT NVL(SUM(ABS(amount)), 0)
+        FROM woorido.account_transactions
+        WHERE account_id = #{accountId}
+          AND amount &lt; 0
+          AND created_at &gt;= TRUNC(SYSTIMESTAMP, 'MM')
+          AND created_at &lt; ADD_MONTHS(TRUNC(SYSTIMESTAMP, 'MM'), 1)
+    </select>
+
+    <insert id="saveTransaction" parameterType="com.woorido.account.domain.AccountTransaction">
+        INSERT INTO woorido.account_transactions (
+            id, account_id, type, amount, balance_before, balance_after,
+            locked_before, locked_after, related_challenge_id, related_user_id,
+            description, pg_provider, pg_tx_id, created_at
+        ) VALUES (
+            #{id}, #{accountId}, #{type, jdbcType=VARCHAR}, #{amount}, #{balanceBefore}, #{balanceAfter},
+            #{lockedBefore}, #{lockedAfter}, #{relatedChallengeId, jdbcType=VARCHAR}, #{relatedUserId, jdbcType=VARCHAR},
+            #{description, jdbcType=VARCHAR}, #{pgProvider, jdbcType=VARCHAR}, #{pgTxId, jdbcType=VARCHAR}, SYSTIMESTAMP
+        )
+    </insert>
+
+    <select id="countSupportByMonth" resultType="int">
+        SELECT COUNT(*)
+        FROM woorido.account_transactions
+        WHERE account_id = #{accountId}
+          AND type = 'SUPPORT'
+          AND related_challenge_id = #{challengeId}
+          AND created_at &gt;= TRUNC(SYSTIMESTAMP, 'MM')
+    </select>
+
+    <select id="countTotalSupport" resultType="int">
+        SELECT COUNT(*)
+        FROM woorido.account_transactions
+        WHERE account_id = #{accountId}
+          AND type = 'SUPPORT'
+          AND related_challenge_id = #{challengeId}
+    </select>
+</mapper>

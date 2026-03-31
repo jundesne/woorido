@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.woorido.challenge.repository.LedgerMapper">
+  <sql id="LedgerColumns">
+    id,
+    challenge_id,
+    type,
+    amount,
+    balance_before,
+    balance_after,
+    description,
+    related_user_id,
+    related_meeting_id,
+    related_expense_request_id,
+    related_barcode_id,
+    merchant_name,
+    merchant_category,
+    pg_provider,
+    pg_approval_number,
+    memo,
+    memo_updated_at,
+    memo_updated_by,
+    created_at
+  </sql>
+
+  <resultMap id="LedgerEntryResultMap" type="com.woorido.challenge.domain.LedgerEntry">
+    <id property="id" column="id"/>
+    <result property="challengeId" column="challenge_id"/>
+    <result property="type" column="type"/>
+    <result property="amount" column="amount"/>
+    <result property="balanceBefore" column="balance_before"/>
+    <result property="balanceAfter" column="balance_after"/>
+    <result property="description" column="description"/>
+    <result property="relatedUserId" column="related_user_id"/>
+    <result property="relatedMeetingId" column="related_meeting_id"/>
+    <result property="relatedExpenseRequestId" column="related_expense_request_id"/>
+    <result property="relatedBarcodeId" column="related_barcode_id"/>
+    <result property="merchantName" column="merchant_name"/>
+    <result property="merchantCategory" column="merchant_category"/>
+    <result property="pgProvider" column="pg_provider"/>
+    <result property="pgApprovalNumber" column="pg_approval_number"/>
+    <result property="memo" column="memo"/>
+    <result property="memoUpdatedAt" column="memo_updated_at"/>
+    <result property="memoUpdatedBy" column="memo_updated_by"/>
+    <result property="createdAt" column="created_at"/>
+  </resultMap>
+
+  <insert id="insert" parameterType="com.woorido.challenge.domain.LedgerEntry">
+        INSERT INTO woorido.ledger_entries (
+            id, challenge_id, type, amount, description,
+            balance_before, balance_after,
+            related_user_id, related_meeting_id, related_expense_request_id, related_barcode_id,
+            merchant_name, merchant_category, pg_provider, pg_approval_number,
+            memo, memo_updated_at, memo_updated_by, created_at
+        ) VALUES (
+            #{id}, #{challengeId}, #{type}, #{amount}, #{description},
+            #{balanceBefore}, #{balanceAfter},
+            #{relatedUserId, jdbcType=VARCHAR}, #{relatedMeetingId, jdbcType=VARCHAR},
+            #{relatedExpenseRequestId, jdbcType=VARCHAR}, #{relatedBarcodeId, jdbcType=VARCHAR},
+            #{merchantName, jdbcType=VARCHAR}, #{merchantCategory, jdbcType=VARCHAR},
+            #{pgProvider, jdbcType=VARCHAR}, #{pgApprovalNumber, jdbcType=VARCHAR},
+            #{memo, jdbcType=VARCHAR}, #{memoUpdatedAt, jdbcType=TIMESTAMP},
+            #{memoUpdatedBy, jdbcType=VARCHAR}, SYSTIMESTAMP
+        )
+  </insert>
+
+  <select id="findSupportHistory" resultMap="LedgerEntryResultMap">
+    SELECT <include refid="LedgerColumns"/>
+    FROM woorido.ledger_entries
+    WHERE challenge_id = #{challengeId}
+      AND related_user_id = #{userId}
+      AND type = 'SUPPORT'
+    ORDER BY created_at DESC
+  </select>
+
+  <select id="findByChallengeId" resultMap="LedgerEntryResultMap">
+    SELECT
+      id,
+      challenge_id,
+      type,
+      amount,
+      balance_before,
+      balance_after,
+      description,
+      related_user_id,
+      related_meeting_id,
+      related_expense_request_id,
+      related_barcode_id,
+      merchant_name,
+      merchant_category,
+      pg_provider,
+      pg_approval_number,
+      memo,
+      memo_updated_at,
+      memo_updated_by,
+      created_at
+    FROM (
+      SELECT
+        le.id,
+        le.challenge_id,
+        le.type,
+        le.amount,
+        le.balance_before,
+        le.balance_after,
+        le.description,
+        le.related_user_id,
+        le.related_meeting_id,
+        le.related_expense_request_id,
+        le.related_barcode_id,
+        le.merchant_name,
+        le.merchant_category,
+        le.pg_provider,
+        le.pg_approval_number,
+        le.memo,
+        le.memo_updated_at,
+        le.memo_updated_by,
+        le.created_at,
+        ROWNUM AS RNUM
+      FROM (
+        SELECT <include refid="LedgerColumns"/>
+        FROM woorido.ledger_entries
+        WHERE challenge_id = #{challengeId}
+        ORDER BY created_at DESC
+      ) le
+      WHERE ROWNUM &lt;= (#{offset} + #{limit})
+    )
+    WHERE RNUM &gt; #{offset}
+  </select>
+
+  <select id="countByChallengeId" resultType="long">
+    SELECT COUNT(*)
+    FROM woorido.ledger_entries
+    WHERE challenge_id = #{challengeId}
+  </select>
+
+  <select id="findById" resultMap="LedgerEntryResultMap">
+    SELECT <include refid="LedgerColumns"/>
+    FROM woorido.ledger_entries
+    WHERE id = #{entryId}
+  </select>
+
+  <update id="updateLedgerEntry" parameterType="com.woorido.challenge.domain.LedgerEntry">
+    UPDATE woorido.ledger_entries
+    <set>
+      <if test="description != null">description = #{description},</if>
+      <if test="memo != null">memo = #{memo},</if>
+      <if test="memoUpdatedAt != null">memo_updated_at = #{memoUpdatedAt},</if>
+      <if test="memoUpdatedBy != null">memo_updated_by = #{memoUpdatedBy}</if>
+    </set>
+    WHERE id = #{id}
+  </update>
+
+  <select id="summarizeByChallengeId" resultType="java.util.Map">
+    SELECT
+      NVL(SUM(CASE WHEN type IN ('SUPPORT', 'ENTRY_FEE', 'REFUND') THEN amount ELSE 0 END), 0) AS TOTAL_INCOME,
+      NVL(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) AS TOTAL_EXPENSE,
+      NVL(SUM(CASE WHEN type IN ('SUPPORT', 'ENTRY_FEE', 'REFUND') THEN amount ELSE -amount END), 0) AS BALANCE,
+      COUNT(*) AS ENTRY_COUNT
+    FROM woorido.ledger_entries
+    WHERE challenge_id = #{challengeId}
+  </select>
+</mapper>
