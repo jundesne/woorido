@@ -5,6 +5,11 @@
 .venv/
 woorido_skills/
 
+# Env / secrets
+**/.env
+**/.env.*
+!**/.env.example
+
 # Gradle
 .gradle-home/
 **/.gradle/
